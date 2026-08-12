@@ -39,12 +39,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Rust toolchain (pinned)
-        # rust-toolchain.toml 固定 1.97.1；rustup 会自动按文件安装。
-        run: rustup show
+      - name: Install Rust toolchain (pinned) + components
+        # rust-toolchain.toml 固定 1.97.1；rustup 会自动按文件安装工具链。
+        # 显式添加 rustfmt + clippy 组件(rustup show 不保证安装它们)。
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
 
       - name: Install target
         run: rustup target add ${{ matrix.target }}
+
 
       - name: Cache cargo registry + build
         uses: actions/cache@v4

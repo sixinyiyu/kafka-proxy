@@ -51,6 +51,16 @@ Kafka frames, rewriting `MetadataResponse` / `FindCoordinatorResponse` so the
 client always reconnects through the proxy instead of reaching the real brokers
 directly.
 
+## CI
+
+[![Build (x86 + ARM)](https://github.com/zzzdong/kafka-demo/actions/workflows/build.yml/badge.svg)](https://github.com/zzzdong/kafka-demo/actions/workflows/build.yml)
+
+Pre-built binaries for **x86_64** and **aarch64** (ARM64) are produced by the
+GitHub Actions pipeline. Push a tag (`v*`) to publish a release; see
+[`.github/workflows/build.yml`](.github/workflows/build.yml). Since the proxy and
+all its dependencies (including `krb5-gss` / `rustls`) are pure Rust with no C
+FFI, the binaries are fully static-friendly and need no system libraries.
+
 ## Quick start
 
 ### 1. Build
@@ -60,6 +70,9 @@ cargo build --release
 ```
 
 > The project pins its toolchain via `rust-toolchain.toml` for reproducibility.
+> You can also download a pre-built binary from the [releases page](https://github.com/zzzdong/kafka-demo/releases)
+> (choose `kafka-proxy-<version>-x86_64.tar.gz` or `-aarch64.tar.gz`).
+
 
 ### 2. Configure
 

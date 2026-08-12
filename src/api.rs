@@ -557,11 +557,10 @@ async fn latest_messages(
             continue;
         }
         for r in batch {
-            if let Some((_, start, end)) = starts.iter().find(|(p, _, _)| p == &r.partition) {
-                if r.offset >= *start && r.offset < *end {
+            if let Some((_, start, end)) = starts.iter().find(|(p, _, _)| p == &r.partition)
+                && r.offset >= *start && r.offset < *end {
                     collected.push(r);
                 }
-            }
         }
         if all_partitions_done(&collected, &starts) {
             break;
@@ -613,7 +612,7 @@ fn all_partitions_done(collected: &[ConsumerRecord], starts: &[(i32, i64, i64)])
 }
 
 fn record_to_json(r: ConsumerRecord) -> Value {
-    let key = r.key.map(|b| bytes_to_text(b));
+    let key = r.key.map(bytes_to_text);
     let value = bytes_to_text(r.value);
     let headers: Vec<Value> = r
         .headers

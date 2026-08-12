@@ -325,6 +325,7 @@ impl ProxyConfig {
     }
 
     /// 从 TOML 字符串解析。
+    #[allow(clippy::should_implement_trait)]
     pub fn from_str(text: &str) -> Result<Self, ConfigError> {
         let cfg: ProxyConfig =
             toml::from_str(text).map_err(|e| ConfigError::Parse(e.to_string()))?;
@@ -367,7 +368,7 @@ impl ProxyConfig {
         for (i, m) in self.proxy.bootstrap_server_mapping.iter().enumerate() {
             let parts: Vec<&str> = m.split(',').map(|s| s.trim()).collect();
             let advertise_part = match parts.len() {
-                1 | 2 | 3 => parts[parts.len() - 1],
+                1..=3 => parts[parts.len() - 1],
                 _ => {
                     return Err(ConfigError::Invalid(format!(
                         "proxy.bootstrap_server_mapping[{i}] = {m:?} 格式非法：支持 1/2/3 段(逗号分隔)"

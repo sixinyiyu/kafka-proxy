@@ -56,11 +56,11 @@ impl UpstreamAuth {
                 let principal = auth
                     .kerberos_principal
                     .clone()
-                    .ok_or_else(|| UpstreamError::Missing("kerberos_principal"))?;
+                    .ok_or(UpstreamError::Missing("kerberos_principal"))?;
                 let keytab = auth
                     .kerberos_keytab
                     .clone()
-                    .ok_or_else(|| UpstreamError::Missing("kerberos_keytab"))?;
+                    .ok_or(UpstreamError::Missing("kerberos_keytab"))?;
                 let mut creds = KerberosCredentials::new(principal).with_keytab(keytab);
                 if let Some(realm) = &auth.kerberos_realm {
                     creds = creds.with_realm(realm);
@@ -210,11 +210,11 @@ fn user_pass(auth: &AuthConfig) -> Result<(String, String), UpstreamError> {
     let u = auth
         .username
         .clone()
-        .ok_or_else(|| UpstreamError::Missing("username"))?;
+        .ok_or(UpstreamError::Missing("username"))?;
     let p = auth
         .password
         .clone()
-        .ok_or_else(|| UpstreamError::Missing("password"))?;
+        .ok_or(UpstreamError::Missing("password"))?;
     Ok((u, p))
 }
 
@@ -222,7 +222,7 @@ fn parse_kdc(auth: &AuthConfig) -> Result<(String, u16), UpstreamError> {
     let kdc = auth
         .kerberos_kdc
         .as_deref()
-        .ok_or_else(|| UpstreamError::Missing("kerberos_kdc"))?;
+        .ok_or(UpstreamError::Missing("kerberos_kdc"))?;
     let (h, p) = kdc
         .rsplit_once(':')
         .ok_or_else(|| UpstreamError::InvalidKdc(kdc.to_string()))?;

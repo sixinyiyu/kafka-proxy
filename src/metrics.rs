@@ -43,6 +43,12 @@ pub struct Histogram {
     count: AtomicU64,
 }
 
+impl Default for Histogram {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Histogram {
     pub const DEFAULT_BUCKETS: &'static [f64] =
         &[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1.0, 5.0];
@@ -354,11 +360,10 @@ pub fn process_rss_bytes() -> u64 {
     {
         if let Ok(text) = std::fs::read_to_string("/proc/self/statm") {
             let fields: Vec<&str> = text.split_whitespace().collect();
-            if fields.len() >= 2 {
-                if let Ok(pages) = fields[1].parse::<u64>() {
+            if fields.len() >= 2
+                && let Ok(pages) = fields[1].parse::<u64>() {
                     return pages * page_size_kb() * 1024;
                 }
-            }
         }
         0
     }

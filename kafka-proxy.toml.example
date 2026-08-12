@@ -1,0 +1,87 @@
+# kafka-proxy 配置示例 — 见 docs/kafka-proxy-design.md §8
+#
+# 用法: ./kafka-proxy -c config.toml   (默认读取 ./config.toml)
+# 客户端只需: bootstrap.servers=127.0.0.1:19092 (proxy 的某个端口), security.protocol=PLAINTEXT
+
+[cluster]
+# 真实集群 broker 列表(用于上游连接与元数据发现)。
+# 顺序与下方 proxy.bootstrap_server_mapping 一一对应(第1个 broker↔第1个监听端口)。
+# 仅需填部分 broker 即可(proxy 会通过元数据发现全部 broker 及其 node_id)。
+bootstrap_servers = [
+    "broker1.example.com:9092",
+    "broker2.example.com:9092",
+    "broker3.example.com:9092",
+]
+
+[proxy]
+# 按 [cluster].bootstrap_servers 顺序一一对应的下游监听地址数组，
+# 每项形如 `advertise_host:port`：
+#   - 主机名(advertise_host)：写进改写后元数据，告诉客户端"连这个地址"。
+#     本地测试用 127.0.0.1；k8s 用 Service DNS(如 kafka-proxy.svc)。
+#   - 端口：proxy 在 listen_bind 上绑定监听该端口。
+#
+# 第1个地址对应第1个 bootstrap broker，第2个对应第2个，依此类推。
+# 数组长度必须与 bootstrap_servers 相等。用户无需知道原 broker 的 node_id ——
+# proxy 启动时用元数据自动反查(见 .clinerules/Configuration：按 bootstrap 顺序自动对应)。
+#
+# 也可省略每项的主机名(只写 ":port")，此时统一回退用下面的 advertise_host。
+bootstrap_server_mapping = ["127.0.0.1:19092", "127.0.0.1:19093", "127.0.0.1:19094"]
+
+# (可选) advertise_host：当 bootstrap_server_mapping 某项省略主机名时的回退。
+# 若每项都带主机名则可不配此项。
+# advertise_host = "proxy.svc"
+
+# 监听绑定地址，默认 0.0.0.0(监听所有网卡；k8s 里靠 Service 转发进来)。
+listen_bind    = "0.0.0.0"
+max_downstream_connections = 10000
+
+# ---- 上游认证(到真实 broker) ----
+[upstream.auth]
+mechanism = "gssapi"                 # 场景 A：Kerberos
+kerberos_principal = "user@EXAMPLE.COM"
+kerberos_keytab    = "/path/to/kafka.keytab"
+kerberos_kdc       = "broker2.example.com:88"
+kerberos_realm     = "HADOOP.COM"
+# 切换非 Kerberos 集群：
+# mechanism = "none"
+# mechanism = "scram-sha512"
+# username = "user"
+# password = "pass"
+
+# ---- 下游认证(到客户端)，默认 none(明文) ----
+[downstream.auth]
+mechanism = "none"
+
+# ---- 连接池与转发模式(见设计文档 §3.6) ----
+[pool]
+# mode = "pooled"            # 多路复用池(默认)：多条下游复用少量上游连接 + cid 重映射
+mode = "per_connection"       # 1:1 流转发：每条下游独占一条上游，最稳
+max_per_broker = 16           # 单 broker 上游连接上限
+min_idle = 2                  # 最小空闲(预热)
+idle_timeout = "5m"           # 空闲回收
+acquire_timeout = "5s"        # 借用等待超时
+health_check = "30s"          # 探活间隔
+max_in_flight = 100000        # cid 映射表上限(背压阈值)
+# max_rss_bytes = 1073741824  # RSS 熔断(1GiB)，触顶拒新连接(防 OOM)
+
+# ---- Web API：health + metrics + doctor(共用同一 HTTP 端口，默认启动) ----
+# 统一 HTTP 服务，启动即监听 [api].listen；health/metrics/doctor 按路径分发：
+#   GET  /health                       存活检查(k8s liveness/readiness)
+#   GET  /metrics                      Prometheus 文本格式指标
+#   GET  /doctor/consumers/{topic}      查询某 topic 的消费者组(成员/分区/lag)
+#   GET  /doctor/messages/{topic}?count=5  查看某 topic 最新数据(默认前 5 条)
+#   POST /doctor/messages/{topic}       body={"value":"...","key?":"...","partition?":0}
+# (见 .clinerules：倾向默认启动 web 端口，移除单独启动 tcp 端口的代码)
+[api]
+listen = "127.0.0.1:9100"
+# health_path  = "/health"
+# metrics_path = "/metrics"
+# debug_prefix = "/doctor"
+# default_count = 5
+# 是否启用 metrics 采集，默认 false(关闭以降低性能开销)。
+# 关闭时 /metrics 端点仍可访问，但所有计数器为 0；开启后转发链路按帧/字节采集。
+# metrics_enabled = false
+
+# ---- 高可用(见设计文档 §5) ----
+[ha]
+mode = "stateless-replicas"   # k8s: stateless-replicas；传统部署: dns-round-robin

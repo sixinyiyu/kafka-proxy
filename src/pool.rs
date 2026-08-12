@@ -217,8 +217,10 @@ pub struct PoolLimits {
 }
 
 impl BrokerPool {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         node_id: i32,
+
         real_addr: SocketAddr,
         real_host: String,
         auth: UpstreamAuth,
@@ -252,16 +254,16 @@ impl BrokerPool {
             // 1. 尝试取空闲。
             {
                 let mut idle = self.idle.lock().await;
-                if let Some(conn) = idle.pop_front() {
-                    if conn.alive {
-                        self.metrics.inc_pool_hits();
-                        let dur = started.elapsed().as_secs_f64();
-                        self.metrics.acquire_hist.observe(dur);
-                        return Ok(Acquired {
-                            write_tx: conn.write_tx.clone(),
-                            conn_id: conn.conn_id,
-                        });
-                    }
+                if let Some(conn) = idle.pop_front()
+                    && conn.alive
+                {
+                    self.metrics.inc_pool_hits();
+                    let dur = started.elapsed().as_secs_f64();
+                    self.metrics.acquire_hist.observe(dur);
+                    return Ok(Acquired {
+                        write_tx: conn.write_tx.clone(),
+                        conn_id: conn.conn_id,
+                    });
                 }
             }
 

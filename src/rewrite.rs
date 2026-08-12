@@ -288,7 +288,7 @@ pub fn parse_request_header(raw: &[u8]) -> Option<(i16, i16, i32)> {
     if raw.len() < 8 {
         return None;
     }
-    let mut cur = &raw[..];
+    let mut cur = raw;
     let api_key = cur.get_i16();
     let api_version = cur.get_i16();
     let correlation_id = cur.get_i32();

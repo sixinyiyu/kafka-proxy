@@ -220,9 +220,11 @@ impl MappedListener {
 }
 
 /// 解析 `bootstrap_server_mapping` 单项，支持三种格式(见 review D8 / .clinerules)：
-///   - `"advertise_host:port"`        → 绑定 listen_bind:port，广告 advertise_host:port
-///   - `"bind_host:port,advertise_host:port"` → 绑定 bind_host:port，广告 advertise_host:port
-///   - `"orig_broker,bind_host:port,advertise_host:port"` → 三元组(第一段忽略，同上)
+///
+/// - `"advertise_host:port"` — 绑定 listen_bind:port，广告 advertise_host:port
+/// - `"bind_host:port,advertise_host:port"` — 绑定 bind_host:port，广告 advertise_host:port
+/// - `"orig_broker,bind_host:port,advertise_host:port"` — 三元组(第一段忽略，同上)
+///
 /// 返回 (bind_addr, advertise_host, advertise_port)。
 fn parse_mapping_entry(
     mapping: &str,
@@ -352,12 +354,10 @@ async fn bootstrap_targets(
     if matches!(
         upstream_auth.inner_ref(),
         crate::upstream::AuthInner::Gssapi { .. }
-    ) {
-        if let Some(first_bs) = config.cluster.bootstrap_servers.first() {
-            if let Some(host) = first_bs.rsplit_once(':').map(|(h, _)| h) {
-                builder = builder.with_broker_hostname(host.to_string());
-            }
-        }
+    ) && let Some(first_bs) = config.cluster.bootstrap_servers.first()
+        && let Some(host) = first_bs.rsplit_once(':').map(|(h, _)| h)
+    {
+        builder = builder.with_broker_hostname(host.to_string());
     }
 
     info!("try to connect bootstrap broker......");
@@ -421,8 +421,10 @@ async fn bootstrap_targets(
     Ok((targets, client))
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn accept_loop_per_connection(
     listener: TcpListener,
+
     target: BrokerTarget,
     auth: Arc<UpstreamAuth>,
     rewrite_map: Arc<RewriteMap>,
@@ -496,9 +498,11 @@ async fn accept_loop_per_connection(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn accept_loop_pooled(
     listener: TcpListener,
     pool: Arc<BrokerPool>,
+
     metrics: SharedMetrics,
     max_connections: usize,
     client_idle_timeout: Option<std::time::Duration>,

@@ -34,7 +34,18 @@
 
 启动时，代理使用配置的上游认证方式连接到真实集群，拉取元数据，并获取每个 bootstrap broker 的 `node_id`。然后，它为每个 bootstrap broker（按顺序）绑定一个下游监听端口，并构建改写映射表。当客户端连接时，代理透明地转发 Kafka 帧，同时改写 `MetadataResponse` / `FindCoordinatorResponse`，确保客户端始终通过代理重连，而不是直接访问真实 broker。
 
+## CI 持续集成
+
+[![Build (x86 + ARM)](https://github.com/sixinyiyu/kafka-proxy/actions/workflows/build.yml/badge.svg)](https://github.com/sixinyiyu/kafka-proxy/actions/workflows/build.yml)
+
+GitHub Actions 流水线会自动构建 **x86_64** 和 **aarch64**（ARM64）可执行安装包。
+推送 tag（`v*`）即触发构建并发布 Release；详见
+[`.github/workflows/build.yml`](.github/workflows/build.yml)。由于代理及其全部依赖
+（包括 `krb5-gss` / `rustls`）均为纯 Rust，无 C FFI，构建产物无需任何系统库。
+代码提交时会自动触发 `cargo fmt` + `cargo clippy` + `cargo check` + `cargo test` 检查。
+
 ## 快速开始
+
 
 ### 1. 编译
 

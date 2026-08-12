@@ -1,1 +1,6 @@
 /target
+.clinerules/
+./examples/
+proxy.log
+kafka-proxy-v1.toml
+kafka-proxy.toml

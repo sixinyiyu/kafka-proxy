@@ -182,13 +182,14 @@ impl Relay {
                         metrics_d2u.add_bytes_downstream(data.len() as u64);
                         if let Some((api_key, api_version, cid)) =
                             rewrite::parse_request_header(&data)
-                            && rewrite::needs_rewrite(api_key) {
-                                if pending_d2u.len() >= MAX_PENDING {
-                                    warn!("pending 映射达上限 {MAX_PENDING}，拒绝记录新 cid");
-                                } else {
-                                    pending_d2u.insert(cid, (api_key, api_version));
-                                }
+                            && rewrite::needs_rewrite(api_key)
+                        {
+                            if pending_d2u.len() >= MAX_PENDING {
+                                warn!("pending 映射达上限 {MAX_PENDING}，拒绝记录新 cid");
+                            } else {
+                                pending_d2u.insert(cid, (api_key, api_version));
                             }
+                        }
                         // 缓冲写入：仅 send，由定时器负责 flush。
                         if up_write.send(KafkaFrame::new(data)).await.is_err() {
                             return;

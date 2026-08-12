@@ -558,9 +558,11 @@ async fn latest_messages(
         }
         for r in batch {
             if let Some((_, start, end)) = starts.iter().find(|(p, _, _)| p == &r.partition)
-                && r.offset >= *start && r.offset < *end {
-                    collected.push(r);
-                }
+                && r.offset >= *start
+                && r.offset < *end
+            {
+                collected.push(r);
+            }
         }
         if all_partitions_done(&collected, &starts) {
             break;

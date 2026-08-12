@@ -361,9 +361,10 @@ pub fn process_rss_bytes() -> u64 {
         if let Ok(text) = std::fs::read_to_string("/proc/self/statm") {
             let fields: Vec<&str> = text.split_whitespace().collect();
             if fields.len() >= 2
-                && let Ok(pages) = fields[1].parse::<u64>() {
-                    return pages * page_size_kb() * 1024;
-                }
+                && let Ok(pages) = fields[1].parse::<u64>()
+            {
+                return pages * page_size_kb() * 1024;
+            }
         }
         0
     }

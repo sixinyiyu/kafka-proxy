@@ -25,7 +25,7 @@ pub struct UpstreamAuth {
     inner: AuthInner,
 }
 
-/// 认证类型枚举（内部）：用枚举匹配，避免字符串(见 .clinerules Code Style)。
+/// 认证类型枚举（内部）
 #[derive(Clone)]
 pub enum AuthInner {
     /// 无认证(明文集群)。
@@ -46,7 +46,7 @@ pub enum AuthInner {
 impl UpstreamAuth {
     /// 从配置段的 `mechanism`(枚举) 构造。
     ///
-    /// 用 `AuthMechanism` 枚举匹配，避免字符串拼写错误(见 .clinerules Code Style)。
+    /// 用 `AuthMechanism` 枚举
     pub fn from_config(auth: &AuthConfig) -> Result<Self, UpstreamError> {
         match auth.mechanism {
             AuthMechanism::None => Ok(Self {
@@ -168,7 +168,7 @@ impl UpstreamAuth {
         }
     }
 
-    /// 把认证配置应用到 kafka_client::ClientBuilder（工厂模式，见 .clinerules 架构）。
+    /// 把认证配置应用到 kafka_client::ClientBuilder
     ///
     /// bootstrap 阶段用 `Client` 拉元数据时复用此方法，避免在 lib.rs 重复一遍
     /// 字符串匹配。构造逻辑集中在 UpstreamAuth，枚举匹配只此一处。

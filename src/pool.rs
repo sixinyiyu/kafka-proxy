@@ -12,7 +12,6 @@
 //!
 //! ## 并发安全
 //! - 池内空闲连接用 `Mutex<VecDeque<LeasedConn>>` 保护；借用走 async notify 等待。
-//! - cid 表用 `DashMap<cid_u, RouteEntry>`(分片无锁，见 .clinerules：并发场景优先 dashmap)。
 
 use std::collections::VecDeque;
 use std::net::SocketAddr;

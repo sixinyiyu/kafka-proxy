@@ -23,6 +23,8 @@ pub struct ProxyConfig {
     pub api: ApiConfig,
     #[serde(default)]
     pub ha: HaConfig,
+    #[serde(default)]
+    pub log: LogConfig,
 }
 
 /// 真实集群 bootstrap（用于上游连接与元数据发现）。
@@ -58,7 +60,6 @@ pub struct ProxySection {
     ///   bootstrap_server_mapping = ["proxy.svc:19092", "proxy.svc:19093", "proxy.svc:19094"]
     /// 端口1(19092) 对应 broker1，端口2(19093) 对应 broker2，依此类推。
     /// 用户无需知道原 broker 的 node_id —— proxy 启动时自动反查。
-    /// (见 .clinerules/Configuration：按 bootstrap 顺序自动对应)
     #[serde(default)]
     pub bootstrap_server_mapping: Vec<String>,
 }
@@ -84,7 +85,6 @@ pub struct DownstreamSection {
     pub auth: AuthConfig,
 }
 
-/// 认证机制枚举：用枚举匹配，避免字符串拼写错误(见 .clinerules Code Style)。
 ///
 /// TOML 用 snake_case / 连字符：`none`/`plain`/`scram-sha256`/`scram-sha512`/
 /// `gssapi`/`mtls`。缺省(空)视为 `none`。
@@ -242,7 +242,6 @@ fn default_max_in_flight() -> usize {
 ///
 /// 统一 HTTP 服务，默认启动：`/health` 健康检查、`/metrics` Prometheus 指标、
 /// `/doctor/*` 调试接口(查询消费者组/消费最新消息/发送消息)，均复用同一端口，
-/// 按路径分发(见 .clinerules：倾向默认启动 web 端口，health/metrics/doctor
 /// 统一作为 router 添加，移除单独启动 tcp 端口的代码)。
 ///
 /// 端点(均返回 JSON / Prometheus 文本，暂不实现前端页面)：
@@ -283,7 +282,7 @@ fn default_debug_count() -> usize {
     5
 }
 
-/// 高可用模式(§5)：用枚举匹配，避免字符串拼写错误(见 .clinerules Code Style)。
+/// 高可用模式(§5)：用枚举匹配
 ///
 /// TOML 用 snake_case：`stateless_replicas`(k8s) / `dns_round_robin`(传统部署)。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
@@ -314,6 +313,31 @@ pub struct HaConfig {
     /// 高可用模式(枚举)，默认 stateless_replicas。
     #[serde(default)]
     pub mode: HaMode,
+}
+
+///
+/// 默认日志只输出到 stdout(stderr)。配置 `log_dir` 后，日志同时写入文件
+/// (按天滚动，保留 `max_files` 个旧文件)，并继续输出到 stdout(systemd 可捕获)。
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct LogConfig {
+    /// 日志文件目录路径。不配则仅输出到 stdout/stderr。
+    /// 配置后日志写入 `{log_dir}/kafka-proxy.log`，按天滚动。
+    #[serde(default)]
+    pub log_dir: Option<String>,
+    /// 日志级别，如 "info"/"debug"/"warn"/"error"/"trace"。
+    /// 默认 "info"。也可用 RUST_LOG 环境变量覆盖(更细粒度，如 "kafka_proxy=debug")。
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    /// 日志文件滚动保留数量(按天)。默认 7。
+    #[serde(default = "default_max_log_files")]
+    pub max_files: usize,
+}
+
+fn default_log_level() -> String {
+    "info".to_string()
+}
+fn default_max_log_files() -> usize {
+    7
 }
 
 impl ProxyConfig {
@@ -546,7 +570,7 @@ bootstrap_server_mapping = ["proxy.svc:9092"]
 [upstream.auth]
 mechanism = "gssapi"
 kerberos_principal = "user@EXAMPLE.COM"
-kerberos_keytab = "/etc/kp/dayukb.keytab"
+kerberos_keytab = "/etc/kp/testkb.keytab"
 kerberos_kdc = "kdc:88"
 kerberos_realm = "HADOOP.COM"
 

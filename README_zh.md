@@ -78,7 +78,7 @@ listen_bind = "0.0.0.0"
 [upstream.auth]
 mechanism = "gssapi"
 kerberos_principal = "user@EXAMPLE.COM"
-kerberos_keytab    = "/home/dayu/dayukb.keytab"
+kerberos_keytab    = "/home/test/testkb.keytab"
 kerberos_kdc       = "kdc.example.com:88"
 kerberos_realm     = "HADOOP.COM"
 

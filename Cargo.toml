@@ -14,6 +14,8 @@ bytes = "1.12.1"
 toml = "0.9.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tracing-appender = "0.2"
+
 futures = "0.3"
 tokio-util = { version = "0.7", features = ["codec"] }
 thiserror = "2.0.19"

@@ -1,12 +1,15 @@
 # 构建 x86_64 / aarch64 可执行安装包的流水线。
-# 见 .clinerules/DevOps：要求配置 GitHub Actions 流水线以构建支持 x86 和 ARM 架构的可执行安装包。
 #
-# 策略：使用 GitHub 原生 runner 矩阵（x86_64 用 ubuntu-latest，aarch64 用
-# ubuntu-24.04-arm），原生编译（非 QEMU 交叉编译），速度快且无系统库依赖
-# (krb5-gss / rustls 均为纯 Rust，无 FFI/C 依赖)。构建产物打包为
-# kafka-proxy-{version}-{arch}.tar.gz 并上传为 release 资产。
 #
-# 触发：推送 tag (如 v0.1.0) → 构建 + 发布 release；PR/推送 main → 仅构建校验。
+# 策略：
+#   - lint(fmt/clippy/check/test) 在原生 runner 上快速跑。
+#   - release 构建在 CentOS 7 容器内编译(glibc 2.17)，保证产出的二进制
+#     在 CentOS 7 / RHEL 7+ / Ubuntu 18+ 等老系统上也能运行(避免 GLIBC_2.38 not found)。
+#     krb5-gss / rustls 均为纯 Rust 无 C FFI，无需容器内安装系统库。
+#   - x86_64 用 ubuntu-latest + centos:7 容器；
+#     aarch64 用 ubuntu-24.04-arm + centos:7 容器。
+#
+# 触发：推送 tag (v*) → 构建 + 发布 release；PR/推送 main → 仅 lint + 构建校验。
 
 name: Build (x86 + ARM)
 
@@ -21,79 +24,84 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  lint:
+    name: Lint + Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust toolchain + components
+        run: |
+          rustup show
+          rustup component add rustfmt clippy
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: lint-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo check + test
+        run: |
+          cargo check --all-targets
+          cargo test --lib
+
   build:
     name: Build ${{ matrix.arch }}
+    needs: lint
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x86_64
-            target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
           - arch: aarch64
-            target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install Rust toolchain (pinned) + components
-        # rust-toolchain.toml 固定 1.97.1；rustup 会自动按文件安装工具链。
-        # 显式添加 rustfmt + clippy 组件(rustup show 不保证安装它们)。
-        run: |
-          rustup show
-          rustup component add rustfmt clippy
-
-      - name: Install target
-        run: rustup target add ${{ matrix.target }}
-
-
-      - name: Cache cargo registry + build
-        uses: actions/cache@v4
+      - name: Build in CentOS 7 container (glibc 2.17 for max compat)
+        uses: docker://centos:7
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-
-      - name: cargo fmt (check formatting)
-        run: cargo fmt --all -- --check
-
-      - name: cargo clippy (lint)
-        run: cargo clippy --all-targets -- -D warnings
-
-      - name: cargo check + test
-        run: |
-          cargo check --all-targets
-          cargo test --lib
-
-
-      - name: Build release binary
-        run: cargo build --release --target ${{ matrix.target }}
+          args: >
+            bash -c "
+            yum install -y curl gcc make &&
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97.1 &&
+            source $HOME/.cargo/env &&
+            rustup component add rustfmt clippy &&
+            cargo build --release &&
+            mkdir -p /workspace/pkg &&
+            cp target/release/kafka-proxy /workspace/pkg/ &&
+            cp kafka-proxy.toml.example /workspace/pkg/ &&
+            cp README.md /workspace/pkg/ &&
+            cp install.sh /workspace/pkg/
+            "
 
       - name: Package install bundle
-        # 打包二进制 + 默认配置示例 + README，便于开箱即用。
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          # 非 tag 构建用 commit 短哈希作版本号。
           if [[ "$GITHUB_REF" != refs/tags/* ]]; then
             VERSION="dev-$(echo "$GITHUB_SHA" | cut -c1-8)"
           fi
           PKG="kafka-proxy-${VERSION}-${{ matrix.arch }}"
           mkdir -p "$PKG"
-          cp target/${{ matrix.target }}/release/kafka-proxy "$PKG/"
+          # 从容器输出目录拷贝产物
+          cp /workspace/pkg/kafka-proxy "$PKG/" || cp target/release/kafka-proxy "$PKG/"
           cp kafka-proxy.toml.example "$PKG/"
           cp README.md "$PKG/"
-          # 写入版本/构建信息
+          cp install.sh "$PKG/"
+          chmod +x "$PKG/install.sh"
           cat > "$PKG/VERSION.txt" <<EOF
           kafka-proxy ${VERSION}
           arch: ${{ matrix.arch }}
-          target: ${{ matrix.target }}
           build: ${GITHUB_SHA}
-          rust: $(rustc --version)
+          rust: $(rustc --version 2>/dev/null || echo "1.97.1")
+          glibc_target: 2.17 (CentOS 7 compat)
           EOF
           tar czf "${PKG}.tar.gz" "$PKG"
           echo "PKG_NAME=${PKG}.tar.gz" >> "$GITHUB_ENV"
@@ -106,23 +114,18 @@ jobs:
           retention-days: 14
 
   release:
-    # 仅 tag 推送时发布 release；PR/main 推送只做构建校验。
     name: Publish release
     needs: build
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
-
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
           merge-multiple: true
-
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: artifacts/*.tar.gz

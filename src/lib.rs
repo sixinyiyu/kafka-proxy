@@ -219,7 +219,7 @@ impl MappedListener {
     }
 }
 
-/// 解析 `bootstrap_server_mapping` 单项，支持三种格式(见 review D8 / .clinerules)：
+/// 解析 `bootstrap_server_mapping` 单项，支持三种格式
 ///
 /// - `"advertise_host:port"` — 绑定 listen_bind:port，广告 advertise_host:port
 /// - `"bind_host:port,advertise_host:port"` — 绑定 bind_host:port，广告 advertise_host:port

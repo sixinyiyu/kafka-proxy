@@ -37,8 +37,7 @@ pub const API_KEY_FIND_COORDINATOR: i16 = 10;
 /// 主机名)，写入元数据告诉客户端"连这个地址"。
 ///
 /// 用 `DashMap` 而非 `HashMap`：RewriteMap 经 Arc 在多条 relay 任务间共享，改写时
-/// 并发读；P4 元数据动态化时还需并发插入新 broker 端口(见 .clinerules Development
-/// Tools：并发场景优先 dashmap)。
+/// 并发读；P4 元数据动态化时还需并发插入新 broker 端口
 #[derive(Debug)]
 pub struct RewriteMap {
     /// node_id -> (advertise_host, 下游端口)(并发安全)。
@@ -564,7 +563,7 @@ mod tests {
             port: -1,
             coordinators: vec![
                 Coordinator {
-                    key: "dayu_audit".to_string(),
+                    key: "order_audit".to_string(),
                     node_id: 2,
                     host: "real-coordinator-2".to_string(),
                     port: 9092,
@@ -602,7 +601,7 @@ mod tests {
         // node_id=2 → 127.0.0.1:19093。
         assert_eq!(resp.coordinators[0].host, "127.0.0.1");
         assert_eq!(resp.coordinators[0].port, 19093);
-        assert_eq!(resp.coordinators[0].key, "dayu_audit");
+        assert_eq!(resp.coordinators[0].key, "order_audit");
         // node_id=3 → 127.0.0.1:19094。
         assert_eq!(resp.coordinators[1].host, "127.0.0.1");
         assert_eq!(resp.coordinators[1].port, 19094);

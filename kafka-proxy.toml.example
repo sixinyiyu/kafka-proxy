@@ -22,7 +22,7 @@ bootstrap_servers = [
 #
 # 第1个地址对应第1个 bootstrap broker，第2个对应第2个，依此类推。
 # 数组长度必须与 bootstrap_servers 相等。用户无需知道原 broker 的 node_id ——
-# proxy 启动时用元数据自动反查(见 .clinerules/Configuration：按 bootstrap 顺序自动对应)。
+# proxy 启动时用元数据自动反查
 #
 # 也可省略每项的主机名(只写 ":port")，此时统一回退用下面的 advertise_host。
 bootstrap_server_mapping = ["127.0.0.1:19092", "127.0.0.1:19093", "127.0.0.1:19094"]
@@ -71,7 +71,6 @@ max_in_flight = 100000        # cid 映射表上限(背压阈值)
 #   GET  /doctor/consumers/{topic}      查询某 topic 的消费者组(成员/分区/lag)
 #   GET  /doctor/messages/{topic}?count=5  查看某 topic 最新数据(默认前 5 条)
 #   POST /doctor/messages/{topic}       body={"value":"...","key?":"...","partition?":0}
-# (见 .clinerules：倾向默认启动 web 端口，移除单独启动 tcp 端口的代码)
 [api]
 listen = "127.0.0.1:9100"
 # health_path  = "/health"
@@ -85,3 +84,18 @@ listen = "127.0.0.1:9100"
 # ---- 高可用(见设计文档 §5) ----
 [ha]
 mode = "stateless-replicas"   # k8s: stateless-replicas；传统部署: dns-round-robin
+
+# ---- 日志(见 .clinerules/Configuration：支持指定日志输出文件目录路径) ----
+[log]
+# 日志级别：trace/debug/info/warn/error，默认 info。
+
+# 也可用 RUST_LOG 环境变量覆盖(更细粒度，如 "kafka_proxy=debug,kafka_client=info")。
+level = "info"
+# 日志文件目录路径。配置后日志同时写入文件(按天滚动) + stdout。
+# 不配置则仅输出到 stdout(systemd 可通过 journalctl 查看)。
+# 支持绝对路径和相对路径：相对路径相对于本配置文件所在目录解析。
+# log_dir = "/var/log/kafka-proxy"   # 绝对路径
+# log_dir = "logs"                     # 相对路径(相对于 config.toml 所在目录)
+
+# 日志文件滚动保留数量(按天)，默认 7。
+# max_files = 7

@@ -136,7 +136,15 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      - name: List downloaded artifacts
+        run: |
+          echo "=== downloaded artifacts (将上传到 release 的安装包) ==="
+          ls -laR artifacts
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          # 关键：必须显式指定 files，否则 action 只会生成 release notes 而不上传任何安装包。
+          files: artifacts/*.tar.gz
+          # 安全网：若 glob 未匹配到任何文件则让本步骤失败，避免“流水线成功却无安装包”再次发生。
+          fail_on_unmatched_files: true

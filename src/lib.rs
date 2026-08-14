@@ -63,7 +63,7 @@ pub async fn run(config: ProxyConfig, cancel: CancellationToken) -> Result<(), P
 
     let (targets, client) = bootstrap_targets(&config, &upstream_auth).await?;
     info!(
-        "bootstrap success target  brokers {}",
+        "bootstrap success target  brokers: \n {}",
         targets
             .iter()
             .map(|t| t.debug_broker())
@@ -76,7 +76,7 @@ pub async fn run(config: ProxyConfig, cancel: CancellationToken) -> Result<(), P
     // 以可读格式打印「监听端口 → 真实 broker」映射(按 bootstrap 顺序)，
     // 避免直接 Debug 整个结构体导致日志难以阅读。
     info!(
-        "下游监听映射(按 bootstrap 顺序): {}",
+        "下游监听映射(按 bootstrap 顺序): \n {}",
         listeners
             .iter()
             .map(|item| item.info())

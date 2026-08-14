@@ -37,10 +37,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // 如果配置了 log_dir，切换到「文件 + stdout」双输出。
     //
-    // log_dir 支持绝对路径和相对路径：
-    //   - 绝对路径(如 /var/log/kafka-proxy) → 直接使用。
-    //   - 相对路径(如 logs 或 ./logs) → 相对于配置文件所在目录解析，
-    //     而非进程 CWD(systemd 下 CWD 可能是 /，容易写错位置)。
     if let Some(ref log_dir) = config.log.log_dir {
         // 相对路径则拼接配置文件所在目录，使日志目录与配置文件同级。
         let resolved_dir = if std::path::Path::new(log_dir).is_absolute() {
@@ -77,7 +73,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .with_ansi(true),
                 );
             let _ = tracing::subscriber::set_global_default(subscriber);
-            info!(log_dir = %resolved_dir, level = %config.log.level, "日志已配置(文件+stdout)");
+            // 明确打印实际日志文件完整路径，便于排查日志去向。
+            let log_file = std::path::Path::new(&resolved_dir).join("kafka-proxy.log");
+            info!(log_file = %log_file.display(), level = %config.log.level, "日志将输出到: 文件 + stdout");
         }
     }
 

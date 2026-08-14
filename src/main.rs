@@ -2,15 +2,84 @@
 
 use std::path::PathBuf;
 
+use std::fmt;
+
 use clap::Parser;
 use tokio_util::sync::CancellationToken;
-use tracing::{info, warn};
+use tracing::{Event, Level, Subscriber, info, warn};
 
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::{
+    FmtContext,
+    format::{FormatEvent, FormatFields, Writer},
+    time::{FormatTime, SystemTime},
+};
 #[allow(unused_imports)]
 use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::registry::LookupSpan;
 
 use kafka_proxy::{config::ProxyConfig, run};
+
+/// 自定义日志格式：保留默认 UTC 时间戳与 level，并在消息前打印 `<target:file:line>` 源码位置，
+/// 便于定位日志输出点。时间戳仍由 `SystemTime`（UTC ISO8601）生成，日期格式不变。
+#[derive(Clone, Copy, Default)]
+struct LocationFormat;
+
+impl<S, N> FormatEvent<S, N> for LocationFormat
+where
+    S: Subscriber + for<'a> LookupSpan<'a>,
+    N: for<'a> FormatFields<'a> + 'static,
+{
+    fn format_event(
+        &self,
+        ctx: &FmtContext<'_, S, N>,
+        mut writer: Writer<'_>,
+        event: &Event<'_>,
+    ) -> fmt::Result {
+        let ansi = writer.has_ansi_escapes();
+        let meta = event.metadata();
+        let level = meta.level();
+
+        // 时间戳：复用 SystemTime（UTC ISO8601），保持原有日期格式不变。
+        SystemTime.format_time(&mut writer)?;
+        writer.write_char(' ')?;
+
+        // level（stdout 带 ANSI 颜色，文件输出为纯文本），配色与 tracing-subscriber 默认一致。
+        let (lvl_str, code) = match *level {
+            Level::TRACE => ("TRACE", "35"),
+            Level::DEBUG => ("DEBUG", "34"),
+            Level::INFO => (" INFO", "32"),
+            Level::WARN => (" WARN", "33"),
+            Level::ERROR => ("ERROR", "31"),
+        };
+        if ansi {
+            write!(writer, "\x1b[{code}m{lvl_str}\x1b[0m")?;
+        } else {
+            write!(writer, "{lvl_str}")?;
+        }
+
+        // 源码位置 <target:file:line>，置于消息之前，便于直接定位日志输出点。
+        // 用 `meta.file()`（file!() 宏结果）区分 main.rs / lib.rs / metrics.rs 等文件：
+        // 本项目 target 恒为 crate 根 `kafka_proxy`，单凭 target 无法定位到具体文件。
+        let target = meta.target();
+        let file = meta.file().unwrap_or(target);
+        let loc = match meta.line() {
+            Some(line) => format!("{target}:{file}:{line}"),
+            None => format!("{target}:{file}"),
+        };
+        if ansi {
+            write!(writer, " \x1b[2m<{loc}>\x1b[0m ")?;
+        } else {
+            write!(writer, " <{loc}> ")?;
+        }
+        // （上方的 level 与此处 <loc> 之间已含一个空格，整体为单空格分隔）
+
+        // 事件字段（含 message），委托给内置字段格式化器，保持原有输出语义。
+        ctx.format_fields(writer.by_ref(), event)?;
+
+        writeln!(writer)
+    }
+}
 
 /// kafka-proxy：透明 kafka 代理。
 #[derive(Debug, Parser)]
@@ -30,6 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_env_filter(
             EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
         )
+        .event_format(LocationFormat)
         .init();
 
     info!(path = ?cli.config, "加载配置");
@@ -65,12 +135,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with(
                     tracing_subscriber::fmt::layer()
                         .with_writer(file_writer)
-                        .with_ansi(false),
+                        .with_ansi(false)
+                        .event_format(LocationFormat),
                 )
                 .with(
                     tracing_subscriber::fmt::layer()
                         .with_writer(std::io::stdout)
-                        .with_ansi(true),
+                        .with_ansi(true)
+                        .event_format(LocationFormat),
                 );
             let _ = tracing::subscriber::set_global_default(subscriber);
             // 明确打印实际日志文件完整路径，便于排查日志去向。

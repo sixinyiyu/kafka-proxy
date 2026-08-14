@@ -40,11 +40,22 @@
 
 GitHub Actions 流水线会自动构建 **x86_64** 和 **aarch64**（ARM64）可执行安装包。
 推送 tag（`v*`）即触发构建并发布 Release；详见
-[`.github/workflows/build.yml`](.github/workflows/build.yml)。由于代理及其全部依赖
-（包括 `krb5-gss` / `rustls`）均为纯 Rust，无 C FFI，构建产物无需任何系统库。
+[`.github/workflows/build.yml`](.github/workflows/build.yml)。
 代码提交时会自动触发 `cargo fmt` + `cargo clippy` + `cargo check` + `cargo test` 检查。
 
+Release 构建采用 **musl 静态链接**（`*-unknown-linux-musl`），在 Ubuntu runner 上
+编译（x86_64 用 `ubuntu-latest`，aarch64 用 `ubuntu-24.04-arm`），产出**完全静态、
+不依赖任何 glibc 的二进制**，可在任意 Linux 发行版（新旧皆可：CentOS 7、RHEL 7+、
+Ubuntu 18+、Alpine 等）上运行。该方案（与
+[`kafka_client`](https://github.com/zzzdong/kafka_client) 的 CI 一致）从根本上避开了
+CentOS 7 EOL 镜像失效问题。
+
+> 说明：虽然代理逻辑本身是纯 Rust，但有两个传递依赖会编译 C 代码——`zstd-sys`
+> （Kafka zstd 压缩）和 `aws-lc-sys`（rustls 加密后端）。因此 CI 会安装 `musl-tools`
+> （musl C 工具链）以及 `cmake`/`perl`（aws-lc 构建系统所需）。
+
 ## 快速开始
+
 
 
 ### 1. 编译

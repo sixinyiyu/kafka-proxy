@@ -1,13 +1,16 @@
-# 构建 x86_64 / aarch64 可执行安装包的流水线。
+# 构建 x86_64 / aarch64 静态可执行安装包的流水线。
 #
 #
 # 策略：
-#   - lint(fmt/clippy/check/test) 在原生 runner 上快速跑。
-#   - release 构建在 CentOS 7 容器内编译(glibc 2.17)，保证产出的二进制
-#     在 CentOS 7 / RHEL 7+ / Ubuntu 18+ 等老系统上也能运行(避免 GLIBC_2.38 not found)。
-#     krb5-gss / rustls 均为纯 Rust 无 C FFI，无需容器内安装系统库。
-#   - x86_64 用 ubuntu-latest + centos:7 容器；
-#     aarch64 用 ubuntu-24.04-arm + centos:7 容器。
+#   - lint(fmt/clippy/check/test) 在 ubuntu-latest 原生 runner 上快速跑。
+#   - release 构建采用 musl 静态链接，产出完全静态二进制（不依赖任何 glibc），
+#     可在 CentOS 7 / RHEL 7+ / Ubuntu 18+ 等任意 Linux 新老系统上运行。
+#     参考 kafka_client 的 CI 做法：ubuntu runner + musl-tools + cmake/perl。
+#   - x86_64 用 ubuntu-latest 原生 runner；
+#     aarch64 用 ubuntu-24.04-arm 原生 runner。
+#     两架构均在原生 runner 上编译（无需交叉工具链，musl-tools 即提供对应 musl-gcc）。
+#   - 注意：依赖 zstd-sys / aws-lc-sys 含 C 代码，故需 musl C 工具链 + cmake/perl
+#     （aws-lc 构建系统依赖 cmake/perl；zstd-sys 依赖 musl-gcc）。
 #
 # 触发：推送 tag (v*) → 构建 + 发布 release；PR/推送 main → 仅 lint + 构建校验。
 
@@ -33,13 +36,9 @@ jobs:
         run: |
           rustup show
           rustup component add rustfmt clippy
-      - uses: actions/cache@v4
+      - uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: lint-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: lint
       - name: cargo fmt
         run: cargo fmt --all -- --check
       - name: cargo clippy
@@ -50,7 +49,7 @@ jobs:
           cargo test --lib
 
   build:
-    name: Build ${{ matrix.arch }}
+    name: Build ${{ matrix.arch }} (musl static)
     needs: lint
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -59,28 +58,40 @@ jobs:
         include:
           - arch: x86_64
             runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
           - arch: aarch64
             runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build in CentOS 7 container (glibc 2.17 for max compat)
-        uses: docker://centos:7
+      # musl-tools 提供 musl-gcc；cmake/perl 是 aws-lc-sys 构建系统所需；
+      # perl 亦是部分 C 库构建脚本依赖。
+      - name: Install musl toolchain + build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y musl-tools cmake perl
+
+      - name: Install Rust toolchain
+        run: |
+          rustup default 1.97.1
+          rustup target add ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
         with:
-          args: >
-            bash -c "
-            yum install -y curl gcc make &&
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.97.1 &&
-            source $HOME/.cargo/env &&
-            rustup component add rustfmt clippy &&
-            cargo build --release &&
-            mkdir -p /workspace/pkg &&
-            cp target/release/kafka-proxy /workspace/pkg/ &&
-            cp kafka-proxy.toml.example /workspace/pkg/ &&
-            cp README.md /workspace/pkg/ &&
-            cp install.sh /workspace/pkg/
-            "
+          key: build-${{ matrix.arch }}
+
+      - name: cargo build --release (musl static)
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Verify static binary
+        run: |
+          BIN="target/${{ matrix.target }}/release/kafka-proxy"
+          echo "=== file ==="
+          file "$BIN"
+          echo "=== ldd (应报 not a dynamic executable) ==="
+          ldd "$BIN" || true
 
       - name: Package install bundle
         run: |
@@ -90,8 +101,7 @@ jobs:
           fi
           PKG="kafka-proxy-${VERSION}-${{ matrix.arch }}"
           mkdir -p "$PKG"
-          # 从容器输出目录拷贝产物
-          cp /workspace/pkg/kafka-proxy "$PKG/" || cp target/release/kafka-proxy "$PKG/"
+          cp "target/${{ matrix.target }}/release/kafka-proxy" "$PKG/"
           cp kafka-proxy.toml.example "$PKG/"
           cp README.md "$PKG/"
           cp install.sh "$PKG/"
@@ -99,9 +109,10 @@ jobs:
           cat > "$PKG/VERSION.txt" <<EOF
           kafka-proxy ${VERSION}
           arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }} (static, musl libc)
           build: ${GITHUB_SHA}
-          rust: $(rustc --version 2>/dev/null || echo "1.97.1")
-          glibc_target: 2.17 (CentOS 7 compat)
+          rust: $(rustc --version)
+          linking: fully static (no glibc dependency)
           EOF
           tar czf "${PKG}.tar.gz" "$PKG"
           echo "PKG_NAME=${PKG}.tar.gz" >> "$GITHUB_ENV"

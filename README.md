@@ -57,12 +57,22 @@ directly.
 
 Pre-built binaries for **x86_64** and **aarch64** (ARM64) are produced by the
 GitHub Actions pipeline. Push a tag (`v*`) to publish a release; see
-[`.github/workflows/build.yml`](.github/workflows/build.yml). Since the proxy and
-all its dependencies (including `krb5-gss` / `rustls`) are pure Rust with no C
-FFI, the binaries are fully static-friendly and need no system libraries.
+[`.github/workflows/build.yml`](.github/workflows/build.yml).
 
+Release builds use **musl static linking** (`*-unknown-linux-musl`) on Ubuntu
+runners (`ubuntu-latest` for x86_64, `ubuntu-24.04-arm` for aarch64), producing
+**fully static binaries with no glibc dependency** that run on any Linux
+distribution — old or new (CentOS 7, RHEL 7+, Ubuntu 18+, Alpine, etc.). This
+approach (the same one used by [`kafka_client`](https://github.com/zzzdong/kafka_client)'s
+CI) avoids the CentOS 7 EOL mirror problems entirely.
+
+> Note: although the proxy logic is pure Rust, two transitive dependencies
+> compile C code — `zstd-sys` (Kafka zstd compression) and `aws-lc-sys`
+> (rustls crypto backend). The CI therefore installs `musl-tools` (musl C
+> toolchain) plus `cmake`/`perl` (needed by aws-lc's build system).
 
 ## Quick start
+
 
 ### 1. Build
 
